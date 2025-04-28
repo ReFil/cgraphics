@@ -9,6 +9,48 @@ mod renderer;
 mod scene;
 mod sphere;
 
+use std::{cell::RefCell, time::Instant};
+
+struct FrameCounter {
+    start_time: Instant,
+    frame_count: u32,
+    last_update: Instant,
+}
+
+impl FrameCounter {
+    fn new() -> Self {
+        Self {
+            start_time: Instant::now(),
+            frame_count: 0,
+            last_update: Instant::now(),
+        }
+    }
+
+    fn update(&mut self, frame_count: u32) {
+        self.frame_count = frame_count;
+        if Instant::now() - self.last_update > std::time::Duration::from_secs(1) {
+            self.last_update = Instant::now();
+        }
+    }
+
+    fn fps(&self) -> f32 {
+        let elapsed = self.last_update.duration_since(self.start_time);
+        self.frame_count as f32 / elapsed.as_secs_f32()
+    }
+
+    fn show(&mut self, ctx: &egui::Context, frame_count: u32) {
+        self.update(frame_count);
+        egui::Area::new(egui::Id::new("fps_area"))
+            .fixed_pos(egui::pos2(10.0, 10.0))
+            .show(ctx, |ui| {
+                ui.set_min_width(150.0); //  Stop the frame count being put on a new line once it exceeds 9
+                ui.label(format!("FPS: {:.2}", self.fps()));
+                ui.label(format!("Frame Count: {:3.2}", frame_count));
+            });
+    }
+
+}
+
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([820.0, 820.0]),
@@ -28,6 +70,8 @@ struct RenderApp {
     buffer: Vec<Vec<Rgba>>,
     camera: Camera,
     scene: Scene,
+    frame_counter: RefCell<FrameCounter>,
+    frame_count: RefCell<u32>,
 }
 
 impl Default for RenderApp {
@@ -55,6 +99,8 @@ impl Default for RenderApp {
             buffer,
             camera,
             scene: Scene::pondering_orbs(),
+            frame_counter: RefCell::new(FrameCounter::new()),
+            frame_count: RefCell::new(0),
         }
     }
 }
@@ -68,6 +114,8 @@ impl eframe::App for RenderApp {
                 egui_extras::image::RetainedImage::from_color_image("text", self.buffer_to_image());
             img.show(ui);
 
+            *self.frame_count.borrow_mut() += 1;
+            self.frame_counter.borrow_mut().show(ctx, *self.frame_count.borrow());
             ctx.input(|inputs| {
                 for pressed in &inputs.keys_down {
                     match pressed {
